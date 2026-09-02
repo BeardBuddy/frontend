@@ -1,18 +1,17 @@
 "use client";
 
 import React from "react";
-import { User } from "@/business-objects/User";
-import { Service } from "@/business-objects/Service";
+import type { BarberDto, ServiceDto } from "@/lib/api/types";
 import { Step2Service } from "@/components/booking/Step2Service";
 import { Step3Barber } from "@/components/booking/Step3Barber";
 
 interface Props {
-  services: Service[];
-  selectedService: Service | null;
-  onSelectService: (svc: Service) => void;
-  availableBarbers: User[];
-  selectedBarber: User | null;
-  onSelectBarber: (barber: User) => void;
+  services: ServiceDto[];
+  selectedService: ServiceDto | null;
+  onSelectService: (svc: ServiceDto) => void;
+  availableBarbers: BarberDto[];
+  selectedBarber: BarberDto | null;
+  onSelectBarber: (barber: BarberDto) => void;
 }
 
 export const Step1ServiceBarber: React.FC<Props> = ({

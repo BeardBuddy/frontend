@@ -1,16 +1,16 @@
 "use client";
 
 import React from "react";
-import { Appointment } from "@/business-objects/Appointment";
+import type { AppointmentDto } from "@/lib/api/types";
 import { SpotlightCard } from "@/common/components/SpotlightCard";
 import { StatusBadge } from "@/common/components/StatusBadge";
 import { StarRatingDisplay } from "@/common/components/StarRating";
 import { Calendar, User } from "lucide-react";
 
 interface Props {
-  appointments: Appointment[];
-  onSelect: (appt: Appointment) => void;
-  onWriteReview: (appt: Appointment) => void;
+  appointments: AppointmentDto[];
+  onSelect: (appt: AppointmentDto) => void;
+  onWriteReview: (appt: AppointmentDto) => void;
 }
 
 export const CompletedList: React.FC<Props> = ({ appointments, onSelect, onWriteReview }) => {
@@ -32,23 +32,23 @@ export const CompletedList: React.FC<Props> = ({ appointments, onSelect, onWrite
         >
           <div className="flex justify-between items-start mb-3">
             <StatusBadge status={appt.status} />
-            <span className="text-xs text-zinc-600 font-medium">${appt.getTotalPrice()}</span>
+            <span className="text-xs text-zinc-600 font-medium">${appt.totalPrice}</span>
           </div>
-          <h4 className="text-lg font-bold text-zinc-200">{appt.getService()?.name}</h4>
+          <h4 className="text-lg font-bold text-zinc-200">{appt.serviceName}</h4>
           <p className="text-sm text-zinc-400 mt-1 flex items-center gap-1.5">
             <User className="h-3.5 w-3.5 text-amber-500" />
-            Barber: {appt.getBarber()?.firstName} {appt.getBarber()?.lastName}
+            Barber: {appt.barberName}
           </p>
           <div className="mt-4 pt-3 border-t border-zinc-900 flex items-center justify-between">
             <span className="text-xs text-zinc-500 flex items-center gap-1">
               <Calendar className="h-3.5 w-3.5" /> {appt.date}
             </span>
-            {appt.getReview() ? (
+            {appt.review ? (
               <div className="flex items-center gap-1 text-amber-500 font-bold text-xs bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
-                <StarRatingDisplay rating={appt.getReview()!.rating} size="sm" />
-                <span className="ml-1">{appt.getReview()!.rating}.0</span>
+                <StarRatingDisplay rating={appt.review.rating} size="sm" />
+                <span className="ml-1">{appt.review.rating}.0</span>
               </div>
-            ) : (
+            ) : appt.canBeReviewed ? (
               <button
                 type="button"
                 onClick={e => { e.stopPropagation(); onWriteReview(appt); }}
@@ -56,7 +56,7 @@ export const CompletedList: React.FC<Props> = ({ appointments, onSelect, onWrite
               >
                 Write Review
               </button>
-            )}
+            ) : null}
           </div>
         </SpotlightCard>
       ))}

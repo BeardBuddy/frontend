@@ -1,26 +1,27 @@
 "use client";
 
 import React from "react";
-import { User } from "@/business-objects/User";
-import { Service } from "@/business-objects/Service";
-import { ExtraService } from "@/business-objects/ExtraService";
+import type { BarberDto, ExtraServiceDto, ServiceDto } from "@/lib/api/types";
 import { Calendar as CalendarIcon, Check, Clock, Scissors, Sparkles, Star, Tag, AlertCircle } from "lucide-react";
 
 interface Props {
-  selectedBarber: User;
-  selectedService: Service;
+  selectedBarber: BarberDto;
+  selectedService: ServiceDto;
   selectedDate: string;
   selectedTime: string;
-  selectedExtras: ExtraService[];
+  extraServices: ExtraServiceDto[];
+  selectedExtras: ExtraServiceDto[];
   notes: string;
   promoInput: string;
   promoDiscount: number;
   promoError: string | null;
   promoApplied: boolean;
-  onToggleExtra: (extra: ExtraService) => void;
+  baseTotal: number;
+  totalPrice: number;
+  onToggleExtra: (extra: ExtraServiceDto) => void;
   onNotesChange: (notes: string) => void;
   onPromoInputChange: (s: string) => void;
-  onApplyPromo: (baseTotal: number) => void;
+  onApplyPromo: () => void;
 }
 
 export const Step4Summary: React.FC<Props> = ({
@@ -28,21 +29,21 @@ export const Step4Summary: React.FC<Props> = ({
   selectedService,
   selectedDate,
   selectedTime,
+  extraServices,
   selectedExtras,
   notes,
   promoInput,
   promoDiscount,
   promoError,
   promoApplied,
+  baseTotal,
+  totalPrice,
   onToggleExtra,
   onNotesChange,
   onPromoInputChange,
   onApplyPromo,
 }) => {
-  const extrasTotal = selectedExtras.reduce((s, e) => s + e.price, 0);
-  const baseTotal = selectedService.getPrice() + extrasTotal;
-  const totalPrice = Math.max(0, baseTotal - promoDiscount);
-  const allExtras = ExtraService.getExtent();
+  const extrasTotal = baseTotal - selectedService.price;
 
   return (
     <div className="flex flex-col gap-6">
@@ -58,10 +59,10 @@ export const Step4Summary: React.FC<Props> = ({
           </div>
           <div>
             <span className="text-[10px] font-bold text-zinc-500 block uppercase tracking-wider">Assigned Barber</span>
-            <h4 className="text-lg font-bold text-zinc-200 mt-0.5">{selectedBarber.firstName} {selectedBarber.lastName}</h4>
+            <h4 className="text-lg font-bold text-zinc-200 mt-0.5">{selectedBarber.fullName}</h4>
             <p className="text-xs text-zinc-400 mt-1">{selectedBarber.seniorityLevel} Specialist • {selectedBarber.experienceYears} yrs exp</p>
             <span className="text-xs font-semibold text-amber-500 flex items-center gap-1 mt-2">
-              <Star className="h-3.5 w-3.5 fill-amber-500" /> {selectedBarber.getAverageRating() || "No ratings yet"}
+              <Star className="h-3.5 w-3.5 fill-amber-500" /> {selectedBarber.averageRating || "No ratings yet"}
             </span>
           </div>
         </div>
@@ -75,7 +76,7 @@ export const Step4Summary: React.FC<Props> = ({
             <p className="text-xs text-zinc-400 mt-1 line-clamp-2">{selectedService.description}</p>
             <div className="flex items-center justify-between mt-2">
               <span className="text-xs text-zinc-500">{selectedService.duration} mins</span>
-              <span className="text-md font-extrabold text-amber-500">${selectedService.getPrice()}</span>
+              <span className="text-md font-extrabold text-amber-500">${selectedService.price}</span>
             </div>
           </div>
         </div>
@@ -86,7 +87,7 @@ export const Step4Summary: React.FC<Props> = ({
           <Sparkles className="h-4 w-4 text-amber-500" /> Enhance Your Visit (Optional Extras)
         </h3>
         <div className="flex flex-col gap-3">
-          {allExtras.map(extra => {
+          {extraServices.map(extra => {
             const isChecked = selectedExtras.some(e => e.id === extra.id);
             return (
               <div
@@ -138,7 +139,7 @@ export const Step4Summary: React.FC<Props> = ({
           />
           <button
             type="button"
-            onClick={() => onApplyPromo(baseTotal)}
+            onClick={onApplyPromo}
             disabled={!promoInput.trim()}
             className={`px-5 py-2.5 rounded-xl font-bold text-sm transition-all ${
               promoInput.trim()
@@ -169,7 +170,7 @@ export const Step4Summary: React.FC<Props> = ({
         </div>
         <div className="flex items-center gap-6 text-right self-end sm:self-auto">
           <div className="text-xs text-zinc-500 text-right">
-            <span>Base: ${selectedService.getPrice()}</span>
+            <span>Base: ${selectedService.price}</span>
             {extrasTotal > 0 && <span className="block mt-0.5">Extras: +${extrasTotal}</span>}
             {promoDiscount > 0 && <span className="block mt-0.5 text-emerald-400">Promo: -${promoDiscount.toFixed(2)}</span>}
           </div>

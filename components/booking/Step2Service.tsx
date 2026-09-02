@@ -1,14 +1,14 @@
 "use client";
 
 import React from "react";
-import { Service } from "@/business-objects/Service";
+import type { ServiceDto } from "@/lib/api/types";
 import { SpotlightCard } from "@/common/components/SpotlightCard";
 import { Check, Clock } from "lucide-react";
 
 interface Props {
-  services: Service[];
-  selectedService: Service | null;
-  onSelect: (svc: Service) => void;
+  services: ServiceDto[];
+  selectedService: ServiceDto | null;
+  onSelect: (svc: ServiceDto) => void;
   compact?: boolean;
 }
 
@@ -46,11 +46,11 @@ export const Step2Service: React.FC<Props> = ({ services, selectedService, onSel
                 </div>
                 <h4 className="text-lg font-bold text-zinc-200">{svc.name}</h4>
                 <p className="text-xs text-zinc-500 mt-1.5 leading-relaxed">{svc.description}</p>
-                <span className="text-xs font-semibold text-zinc-500 mt-3 block flex items-center gap-1">
+                <span className="text-xs font-semibold text-zinc-500 mt-3 flex items-center gap-1">
                   <Clock className="h-3.5 w-3.5" /> {svc.duration} mins
                 </span>
               </div>
-              <span className="text-xl font-black text-amber-500 shrink-0">${svc.getPrice()}</span>
+              <span className="text-xl font-black text-amber-500 shrink-0">${svc.price}</span>
             </div>
           </SpotlightCard>
         );

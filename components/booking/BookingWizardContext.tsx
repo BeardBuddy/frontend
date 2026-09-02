@@ -1,14 +1,13 @@
 "use client";
 
-import React, { createContext, useContext, useState } from "react";
-import { useMemory } from "@/lib/store/store";
-import { User } from "@/business-objects/User";
-import { Service } from "@/business-objects/Service";
-import { ExtraService } from "@/business-objects/ExtraService";
-import { bookAppointmentUseCase } from "@/use-cases/book-appointment";
-import { applyPromoCodeUseCase } from "@/use-cases/apply-promo-code";
-import { toMin, toSlot } from "@/common/utils/timeUtils";
-import { GRID_START_HOUR, GRID_END_HOUR, SLOT_INTERVAL, MIN_SERVICE_DURATION } from "@/common/constants";
+import React, { createContext, useContext, useEffect, useState } from "react";
+import { api } from "@/lib/api/client";
+import type {
+  BarberDto,
+  CustomerDto,
+  ExtraServiceDto,
+  ServiceDto,
+} from "@/lib/api/types";
 
 export const STEP_SERVICE_BARBER = 1;
 export const STEP_DATETIME       = 2;
@@ -17,33 +16,35 @@ export const STEP_SUCCESS        = 4;
 
 interface BookingWizardState {
   step: number;
+  services: ServiceDto[];
+  extraServices: ExtraServiceDto[];
+  availableBarbers: BarberDto[];
+  availableSlots: string[];
+  selectedService: ServiceDto | null;
+  selectedBarber: BarberDto | null;
   selectedDate: string;
   selectedTime: string;
-  selectedService: Service | null;
-  selectedBarber: User | null;
-  selectedExtras: ExtraService[];
+  selectedExtras: ExtraServiceDto[];
   notes: string;
-  isSubmitting: boolean;
   bookingError: string | null;
-  customer: User;
-  customerOccupiedSlots: string[];
-  availableBarbers: User[];
   canAdvance: boolean[];
-  setStep: (s: number) => void;
-  setSelectedDate: (d: string) => void;
-  setSelectedTime: (t: string) => void;
-  handleServiceSelect: (svc: Service) => void;
-  setSelectedBarber: (b: User) => void;
-  handleToggleExtra: (e: ExtraService) => void;
-  setNotes: (n: string) => void;
-  handleConfirm: () => Promise<void>;
-  clearError: () => void;
   promoInput: string;
   promoDiscount: number;
   promoError: string | null;
   promoApplied: boolean;
+  baseTotal: number;
+  totalPrice: number;
+  setStep: (s: number) => void;
+  selectService: (service: ServiceDto) => void;
+  selectBarber: (barber: BarberDto) => void;
+  setSelectedDate: (d: string) => void;
+  setSelectedTime: (t: string) => void;
+  toggleExtra: (extra: ExtraServiceDto) => void;
+  setNotes: (n: string) => void;
   setPromoInput: (s: string) => void;
-  handleApplyPromo: (baseTotal: number) => void;
+  applyPromo: () => Promise<void>;
+  confirmBooking: () => Promise<void>;
+  clearError: () => void;
 }
 
 const BookingWizardContext = createContext<BookingWizardState | undefined>(undefined);
@@ -54,122 +55,138 @@ export const useBookingWizard = (): BookingWizardState => {
   return ctx;
 };
 
-
 interface Props {
-  customer: User;
+  customer: CustomerDto;
+  onBooked: () => void;
   children: React.ReactNode;
 }
 
-export const BookingWizardProvider: React.FC<Props> = ({ customer, children }) => {
-  const { revalidate } = useMemory();
+export const BookingWizardProvider: React.FC<Props> = ({ customer, onBooked, children }) => {
+  const [step, setStep] = useState(STEP_SERVICE_BARBER);
+  const [services, setServices] = useState<ServiceDto[]>([]);
+  const [extraServices, setExtraServices] = useState<ExtraServiceDto[]>([]);
+  const [availableBarbers, setAvailableBarbers] = useState<BarberDto[]>([]);
+  const [availableSlots, setAvailableSlots] = useState<string[]>([]);
 
-  const [state, setState] = useState<{
-    step: number;
-    selectedDate: string;
-    selectedTime: string;
-    selectedService: Service | null;
-    selectedBarber: User | null;
-    selectedExtras: ExtraService[];
-    notes: string;
-    isSubmitting: boolean;
-    bookingError: string | null;
-    promoInput: string;
-    promoDiscount: number;
-    promoError: string | null;
-    promoApplied: boolean;
-  }>({
-    step: STEP_SERVICE_BARBER,
-    selectedDate: "",
-    selectedTime: "",
-    selectedService: null,
-    selectedBarber: null,
-    selectedExtras: [],
-    notes: "",
-    isSubmitting: false,
-    bookingError: null,
-    promoInput: "",
-    promoDiscount: 0,
-    promoError: null,
-    promoApplied: false,
-  });
+  const [selectedService, setSelectedService] = useState<ServiceDto | null>(null);
+  const [selectedBarber, setSelectedBarber] = useState<BarberDto | null>(null);
+  const [selectedDate, setSelectedDateState] = useState("");
+  const [selectedTime, setSelectedTime] = useState("");
+  const [selectedExtras, setSelectedExtras] = useState<ExtraServiceDto[]>([]);
+  const [notes, setNotes] = useState("");
 
-  const { step, selectedDate, selectedTime, selectedService, selectedBarber, selectedExtras, notes, isSubmitting, bookingError, promoInput, promoDiscount, promoError, promoApplied } = state;
+  const [bookingError, setBookingError] = useState<string | null>(null);
 
-  const set = <K extends keyof typeof state>(patch: Pick<typeof state, K>) =>
-    setState(prev => ({ ...prev, ...patch }));
+  const [promoInput, setPromoInputState] = useState("");
+  const [promoDiscount, setPromoDiscount] = useState(0);
+  const [promoError, setPromoError] = useState<string | null>(null);
+  const [promoApplied, setPromoApplied] = useState(false);
 
-  const setStep = (s: number) => set({ step: s });
-  const setSelectedDate = (d: string) => set({ selectedDate: d, selectedTime: "" });
-  const setSelectedTime = (t: string) => set({ selectedTime: t });
-  const setNotes = (n: string) => set({ notes: n });
+  useEffect(() => {
+    Promise.all([api.getServices(), api.getExtraServices()])
+      .then(([loadedServices, loadedExtras]) => {
+        setServices(loadedServices);
+        setExtraServices(loadedExtras);
+      })
+      .catch((err: unknown) =>
+        setBookingError(err instanceof Error ? err.message : "Unable to load the catalogue"),
+      );
+  }, []);
 
-  const handleServiceSelect = (svc: Service) => set({ selectedService: svc, selectedBarber: null });
+  // The barbers for a service come from the server's association, never from a local filter.
+  const selectService = (service: ServiceDto) => {
+    setSelectedService(service);
+    setSelectedBarber(null);
+    setSelectedDateState("");
+    setSelectedTime("");
+    setAvailableSlots([]);
+    resetPromo();
 
-  const setSelectedBarber = (b: User) => set({ selectedBarber: b, selectedDate: "", selectedTime: "" });
+    api
+      .getBarbersOfService(service.id)
+      .then(setAvailableBarbers)
+      .catch((err: unknown) =>
+        setBookingError(err instanceof Error ? err.message : "Unable to load barbers"),
+      );
+  };
 
-  const handleToggleExtra = (extra: ExtraService) =>
-    setState(prev => ({
-      ...prev,
-      selectedExtras: prev.selectedExtras.some(e => e.id === extra.id)
-        ? prev.selectedExtras.filter(e => e.id !== extra.id)
-        : [...prev.selectedExtras, extra],
-    }));
+  const selectBarber = (barber: BarberDto) => {
+    setSelectedBarber(barber);
+    setSelectedDateState("");
+    setSelectedTime("");
+    setAvailableSlots([]);
+  };
 
-  const handleConfirm = async () => {
+  const setSelectedDate = (date: string) => {
+    setSelectedDateState(date);
+    setSelectedTime("");
+
+    if (!date || !selectedBarber || !selectedService) {
+      setAvailableSlots([]);
+      return;
+    }
+
+    api
+      .getAvailableSlots(selectedBarber.id, selectedService.id, date)
+      .then(result => setAvailableSlots(result.slots))
+      .catch(() => setAvailableSlots([]));
+  };
+
+  const toggleExtra = (extra: ExtraServiceDto) => {
+    setSelectedExtras(prev =>
+      prev.some(e => e.id === extra.id) ? prev.filter(e => e.id !== extra.id) : [...prev, extra],
+    );
+    resetPromo();
+  };
+
+  const resetPromo = () => {
+    setPromoDiscount(0);
+    setPromoError(null);
+    setPromoApplied(false);
+  };
+
+  const setPromoInput = (value: string) => {
+    setPromoInputState(value);
+    resetPromo();
+  };
+
+  const baseTotal = (selectedService?.price ?? 0) + selectedExtras.reduce((sum, e) => sum + e.price, 0);
+  const totalPrice = Math.max(0, baseTotal - promoDiscount);
+
+  const applyPromo = async () => {
+    try {
+      const result = await api.applyPromoCode(promoInput, baseTotal);
+      setPromoDiscount(result.discountAmount);
+      setPromoError(null);
+      setPromoApplied(true);
+    } catch (err) {
+      setPromoDiscount(0);
+      setPromoApplied(false);
+      setPromoError(err instanceof Error ? err.message : "Invalid promo code");
+    }
+  };
+
+  const confirmBooking = async () => {
     if (!selectedBarber || !selectedService || !selectedDate || !selectedTime) return;
-    set({ isSubmitting: true, bookingError: null });
+
+    setBookingError(null);
     try {
-      await bookAppointmentUseCase({
-        customer,
-        barber: selectedBarber,
-        service: selectedService,
-        date: new Date(selectedDate + "T00:00:00"),
+      await api.bookAppointment({
+        customerId: customer.id,
+        barberId: selectedBarber.id,
+        serviceId: selectedService.id,
+        date: selectedDate,
         startTime: selectedTime,
-        extraServices: selectedExtras,
-        discount: promoDiscount,
+        extraServiceIds: selectedExtras.map(e => e.id),
+        promoCode: promoApplied ? promoInput.trim() : null,
+        notes: notes.trim() ? notes.trim() : null,
       });
-      await revalidate();
-      set({ step: STEP_SUCCESS });
+      onBooked();
+      setStep(STEP_SUCCESS);
     } catch (err) {
-      set({ bookingError: err instanceof Error ? err.message : "A scheduling conflict occurred." });
-    } finally {
-      set({ isSubmitting: false });
+      setBookingError(err instanceof Error ? err.message : "A scheduling conflict occurred.");
     }
   };
-
-  const clearError = () => set({ bookingError: null });
-
-  const setPromoInput = (s: string) => set({ promoInput: s, promoError: null, promoApplied: false, promoDiscount: 0 });
-
-  const handleApplyPromo = (baseTotal: number) => {
-    try {
-      const { discountAmount } = applyPromoCodeUseCase(promoInput, baseTotal);
-      set({ promoDiscount: discountAmount, promoError: null, promoApplied: true });
-    } catch (err) {
-      set({ promoError: err instanceof Error ? err.message : 'Invalid promo code', promoDiscount: 0, promoApplied: false });
-    }
-  };
-
-  const customerOccupiedSlots: string[] = selectedDate
-    ? (() => {
-        const gridSlots: string[] = [];
-        for (let t = GRID_START_HOUR * 60; t <= GRID_END_HOUR * 60; t += SLOT_INTERVAL) gridSlots.push(toSlot(t));
-        const appointments = customer
-          .getAppointmentsForDay(new Date(selectedDate + "T00:00:00"))
-          .filter(a => a.status !== "CANCELLED");
-        return gridSlots.filter(slot => {
-          const slotMin = toMin(slot);
-          return appointments.some(a => slotMin < toMin(a.endTime) && slotMin + MIN_SERVICE_DURATION > toMin(a.startTime));
-        });
-      })()
-    : [];
-
-  // Navigates the Service -> barbers association directly. The remaining .filter() is a separate
-  // business predicate on the already-associated barbers ("has a schedule at all"), not a stand-in
-  // for the association lookup itself.
-  const availableBarbers: User[] = selectedService
-    ? selectedService.getBarbers().filter(b => b.getSchedules().length > 0)
-    : [];
 
   const canAdvance = [
     !!selectedService && !!selectedBarber,
@@ -178,16 +195,17 @@ export const BookingWizardProvider: React.FC<Props> = ({ customer, children }) =
   ];
 
   return (
-    <BookingWizardContext.Provider value={{
-      step, selectedDate, selectedTime, selectedService, selectedBarber,
-      selectedExtras, notes, isSubmitting, bookingError,
-      customer, customerOccupiedSlots, availableBarbers, canAdvance,
-      setStep, setSelectedDate, setSelectedTime,
-      handleServiceSelect, setSelectedBarber, handleToggleExtra, setNotes,
-      handleConfirm, clearError,
-      promoInput, promoDiscount, promoError, promoApplied,
-      setPromoInput, handleApplyPromo,
-    }}>
+    <BookingWizardContext.Provider
+      value={{
+        step, services, extraServices, availableBarbers, availableSlots,
+        selectedService, selectedBarber, selectedDate, selectedTime, selectedExtras, notes,
+        bookingError, canAdvance,
+        promoInput, promoDiscount, promoError, promoApplied, baseTotal, totalPrice,
+        setStep, selectService, selectBarber, setSelectedDate, setSelectedTime,
+        toggleExtra, setNotes, setPromoInput, applyPromo, confirmBooking,
+        clearError: () => setBookingError(null),
+      }}
+    >
       {children}
     </BookingWizardContext.Provider>
   );

@@ -1,85 +1,94 @@
 "use client";
 
-import React, { useState } from "react";
-import { useMemory } from "@/lib/store/store";
-import { User } from "@/business-objects/User";
-import { Appointment } from "@/business-objects/Appointment";
+import React, { useEffect, useState } from "react";
+import { api } from "@/lib/api/client";
+import type { AppointmentDto, AppointmentListDto, CustomerDto } from "@/lib/api/types";
 import { Modal } from "@/common/components/Modal";
-import { StarRatingInput } from "@/common/components/StarRating";
-import { UserRole } from "@/common/types/UserRole";
-import { AppointmentStatus } from "@/common/types/AppointmentStatus";
-import { submitReviewUseCase } from "@/use-cases/submit-review";
-import { cancelAppointmentUseCase } from "@/use-cases/cancel-appointment";
-import { completeAppointmentUseCase } from "@/use-cases/complete-appointment";
-import { viewAppointmentsUseCase } from "@/use-cases/view-appointments";
+import { StarRatingInput, StarRatingDisplay } from "@/common/components/StarRating";
 import { UpcomingList } from "@/components/dashboard/UpcomingList";
 import { CompletedList } from "@/components/dashboard/CompletedList";
 import { CancelledList } from "@/components/dashboard/CancelledList";
 import { StatusBadge } from "@/common/components/StatusBadge";
-import { StarRatingDisplay } from "@/common/components/StarRating";
 import {
-  Calendar as CalendarIcon, Clock, User as UserIcon,
-  Scissors, DollarSign, PlusCircle, Sparkles, Check, Heart,
+  Calendar as CalendarIcon, Clock, Scissors, PlusCircle,
+  Sparkles, Check, Heart, AlertTriangle,
 } from "lucide-react";
 
 interface DashboardProps {
+  customer: CustomerDto;
   onStartBooking: () => void;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ onStartBooking }) => {
-  const { revalidate } = useMemory();
+const EMPTY: AppointmentListDto = { upcoming: [], completed: [], cancelled: [] };
 
-  const customer = User.getExtent().find(u => u.role === UserRole.CUSTOMER);
+export const Dashboard: React.FC<DashboardProps> = ({ customer, onStartBooking }) => {
+  const [appointments, setAppointments] = useState<AppointmentListDto>(EMPTY);
+  const [error, setError] = useState<string | null>(null);
 
-  const [ui, setUi] = useState<{
-    selectedAppt: Appointment | null;
-    isDetailOpen: boolean;
-    isReviewOpen: boolean;
-    rating: number;
-    comment: string;
-  }>({ selectedAppt: null, isDetailOpen: false, isReviewOpen: false, rating: 5, comment: "" });
+  const [selectedAppt, setSelectedAppt] = useState<AppointmentDto | null>(null);
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [isReviewOpen, setIsReviewOpen] = useState(false);
+  const [rating, setRating] = useState(5);
+  const [comment, setComment] = useState("");
 
-  const { selectedAppt, isDetailOpen, isReviewOpen, rating, comment } = ui;
+  const [reloadToken, setReloadToken] = useState(0);
+  const reload = () => setReloadToken(token => token + 1);
 
-  if (!customer) return null;
+  useEffect(() => {
+    let cancelled = false;
 
-  const { upcoming, past } = viewAppointmentsUseCase(customer);
-  const cancelledAppts = customer.getAppointments().filter(
-    a => a.status === AppointmentStatus.CANCELLED,
-  );
-  const completedAppts = past.filter(a => a.status === AppointmentStatus.COMPLETED);
+    api
+      .getAppointments(customer.id)
+      .then(loaded => {
+        if (!cancelled) setAppointments(loaded);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Unable to load appointments");
+      });
 
-  const openDetails = (appt: Appointment) => setUi(prev => ({ ...prev, selectedAppt: appt, isDetailOpen: true }));
-  const closeDetails = () => setUi(prev => ({ ...prev, selectedAppt: null, isDetailOpen: false }));
+    return () => {
+      cancelled = true;
+    };
+  }, [customer.id, reloadToken]);
 
-  const openReviewForm = (appt: Appointment) =>
-    setUi(prev => ({ ...prev, selectedAppt: appt, rating: 5, comment: "", isDetailOpen: false, isReviewOpen: true }));
-  const closeReviewForm = () => setUi(prev => ({ ...prev, isReviewOpen: false, selectedAppt: null }));
+  const closeDetails = () => { setSelectedAppt(null); setIsDetailOpen(false); };
+  const openDetails = (appt: AppointmentDto) => { setSelectedAppt(appt); setIsDetailOpen(true); };
 
-  const handleReviewSubmit = async (e: React.FormEvent) => {
+  const openReviewForm = (appt: AppointmentDto) => {
+    setSelectedAppt(appt);
+    setRating(5);
+    setComment("");
+    setIsDetailOpen(false);
+    setIsReviewOpen(true);
+  };
+  const closeReviewForm = () => { setIsReviewOpen(false); setSelectedAppt(null); };
+
+  const run = async (action: () => Promise<unknown>, after: () => void) => {
+    setError(null);
+    try {
+      await action();
+      after();
+      reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "The action could not be completed");
+    }
+  };
+
+  const handleReviewSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedAppt) return;
-    await submitReviewUseCase({ currentUser: customer, appointment: selectedAppt, rating, comment });
-    await revalidate();
-    closeReviewForm();
+    const appt = selectedAppt;
+    run(() => api.submitReview(appt.id, customer.id, rating, comment.trim() || null), closeReviewForm);
   };
 
-  const handleCancelClick = async (appt: Appointment) => {
+  const handleCancelClick = (appt: AppointmentDto) => {
     if (!confirm("Are you sure you want to cancel this appointment?")) return;
-    await cancelAppointmentUseCase({ customer, appointment: appt });
-    await revalidate();
-    closeDetails();
+    run(() => api.cancelAppointment(appt.id, customer.id, null), closeDetails);
   };
 
-  const handleFinishClick = async (appt: Appointment) => {
-    await completeAppointmentUseCase({ customer, appointment: appt });
-    await revalidate();
+  const handleFinishClick = (appt: AppointmentDto) => {
+    run(() => api.completeAppointment(appt.id, customer.id), closeDetails);
   };
-
-  const detailBarber  = selectedAppt?.getBarber();
-  const detailService = selectedAppt?.getService();
-  const detailReview  = selectedAppt?.getReview();
-  const detailExtras  = selectedAppt?.getExtraServices() ?? [];
 
   return (
     <div className="flex-1 w-full max-w-6xl mx-auto px-4 py-8">
@@ -90,7 +99,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartBooking }) => {
             <Sparkles className="h-3.5 w-3.5 animate-pulse" /> Member Profile
           </span>
           <h2 className="text-3xl font-extrabold text-zinc-100 tracking-tight">
-            Welcome back, {customer.firstName} {customer.lastName}
+            Welcome back, {customer.fullName}
           </h2>
           <p className="text-zinc-400 mt-1 max-w-lg">
             Manage your style records, review your finished grooming bookings, or schedule your next session.
@@ -106,38 +115,50 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartBooking }) => {
           </div>
           <div className="text-center pl-6 md:pl-8">
             <span className="text-zinc-500 uppercase font-semibold text-xs tracking-wider">Visits Completed</span>
-            <div className="text-3xl font-extrabold text-zinc-100 mt-1">{completedAppts.length}</div>
+            <div className="text-3xl font-extrabold text-zinc-100 mt-1">{appointments.completed.length}</div>
           </div>
         </div>
       </div>
 
+      {error && (
+        <div className="mb-6 rounded-2xl border border-red-950 bg-red-950/20 p-4 flex items-start gap-3">
+          <AlertTriangle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
+          <div>
+            <h5 className="font-bold text-red-400 text-sm">Something went wrong</h5>
+            <p className="text-xs text-red-300/80 mt-1 leading-relaxed">{error}</p>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 flex flex-col gap-8">
-
           <div>
             <h3 className="text-xl font-extrabold text-zinc-100 mb-4 tracking-tight flex items-center gap-2">
               <CalendarIcon className="h-5 w-5 text-amber-500" /> Upcoming Visits
             </h3>
-            <UpcomingList appointments={upcoming} onSelect={openDetails} />
+            <UpcomingList appointments={appointments.upcoming} onSelect={openDetails} />
           </div>
 
           <div>
             <h3 className="text-xl font-extrabold text-zinc-100 mb-4 tracking-tight flex items-center gap-2">
               <Check className="h-5 w-5 text-emerald-500" /> Past Appointments
             </h3>
-            <CompletedList appointments={completedAppts} onSelect={openDetails} onWriteReview={openReviewForm} />
+            <CompletedList
+              appointments={appointments.completed}
+              onSelect={openDetails}
+              onWriteReview={openReviewForm}
+            />
           </div>
 
-          <CancelledList appointments={cancelledAppts} onSelect={openDetails} />
+          <CancelledList appointments={appointments.cancelled} onSelect={openDetails} />
         </div>
-
 
         <div className="h-fit rounded-3xl border border-zinc-800 bg-zinc-950/50 p-6 backdrop-blur-md">
           <h3 className="text-lg font-extrabold text-zinc-100 flex items-center gap-2">
             <PlusCircle className="h-5 w-5 text-amber-500" /> Need a Grooming?
           </h3>
           <p className="text-sm text-zinc-400 mt-2">
-            Schedule a high-end service with our specialized barbers. Our availability algorithms will search real-time schedules.
+            Schedule a high-end service with our specialized barbers. Availability is checked against live barber schedules.
           </p>
           <button
             onClick={onStartBooking}
@@ -147,7 +168,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartBooking }) => {
           </button>
         </div>
       </div>
-
 
       {isDetailOpen && selectedAppt && (
         <Modal onClose={closeDetails} title="Appointment Records">
@@ -173,43 +193,25 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartBooking }) => {
                 <span className="text-sm font-bold text-zinc-200">{selectedAppt.startTime} — {selectedAppt.endTime}</span>
               </div>
             </div>
-            {detailBarber && (
-              <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800 flex items-start gap-4">
-                <div className="bg-amber-500/10 border border-amber-500/30 text-amber-500 rounded-xl h-10 w-10 flex items-center justify-center font-extrabold text-sm shrink-0">
-                  {detailBarber.firstName[0]}{detailBarber.lastName[0]}
-                </div>
-                <div>
-                  <span className="text-xs text-zinc-500 font-semibold block">ASSIGNED BARBER</span>
-                  <span className="text-md font-bold text-zinc-200">{detailBarber.firstName} {detailBarber.lastName}</span>
-                  <span className="text-xs text-zinc-400 block mt-0.5">
-                    {detailBarber.seniorityLevel} Barber • {detailBarber.experienceYears} yrs exp
-                  </span>
-                </div>
-              </div>
-            )}
-            {detailService && (
-              <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800">
-                <span className="text-xs text-zinc-500 font-semibold flex items-center gap-1 mb-2">
-                  <Scissors className="h-3.5 w-3.5 text-zinc-400" /> SERVICE DETAILS
-                </span>
-                <div className="flex justify-between items-start gap-4">
-                  <div>
-                    <span className="text-md font-bold text-zinc-200 block">{detailService.name}</span>
-                    <span className="text-xs text-zinc-400 block mt-1">{detailService.description}</span>
-                  </div>
-                  <span className="text-md font-bold text-amber-500 shrink-0">${detailService.getPrice()}</span>
-                </div>
-              </div>
-            )}
+            <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800">
+              <span className="text-xs text-zinc-500 font-semibold block">ASSIGNED BARBER</span>
+              <span className="text-md font-bold text-zinc-200">{selectedAppt.barberName}</span>
+            </div>
+            <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800">
+              <span className="text-xs text-zinc-500 font-semibold flex items-center gap-1 mb-2">
+                <Scissors className="h-3.5 w-3.5 text-zinc-400" /> SERVICE
+              </span>
+              <span className="text-md font-bold text-zinc-200 block">{selectedAppt.serviceName}</span>
+            </div>
             <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800">
               <span className="text-xs text-zinc-500 font-semibold flex items-center gap-1 mb-2">
                 <Sparkles className="h-3.5 w-3.5 text-zinc-400" /> EXTRA SERVICES
               </span>
-              {detailExtras.length === 0 ? (
+              {selectedAppt.extraServices.length === 0 ? (
                 <span className="text-xs text-zinc-500">No extras added.</span>
               ) : (
                 <div className="flex flex-col gap-2">
-                  {detailExtras.map(e => (
+                  {selectedAppt.extraServices.map(e => (
                     <div key={e.id} className="flex justify-between items-center text-sm">
                       <span className="text-zinc-300 flex items-center gap-1.5 font-medium">
                         <span className="h-1.5 w-1.5 rounded-full bg-amber-500" /> {e.name}
@@ -229,21 +231,29 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartBooking }) => {
               </div>
               <div className="text-right">
                 <span className="text-xs text-zinc-500 block font-semibold">TOTAL PRICE</span>
-                <span className="text-2xl font-extrabold text-amber-500">${selectedAppt.getTotalPrice()}</span>
+                <span className="text-2xl font-extrabold text-amber-500">${selectedAppt.totalPrice}</span>
               </div>
             </div>
-            {detailReview && (
+            {selectedAppt.cancellationReason && (
+              <div className="bg-red-950/20 p-4 rounded-xl border border-red-950">
+                <span className="text-xs text-red-400 font-bold block mb-1">CANCELLATION REASON</span>
+                <p className="text-sm text-zinc-400">{selectedAppt.cancellationReason}</p>
+              </div>
+            )}
+            {selectedAppt.review && (
               <div className="bg-amber-500/5 p-4 rounded-xl border border-amber-500/10">
                 <span className="text-xs text-amber-500 font-bold block mb-1.5">SUBMITTED FEEDBACK</span>
                 <div className="flex items-center gap-2 mb-2">
-                  <StarRatingDisplay rating={detailReview.rating} size="md" />
-                  <span className="text-xs text-zinc-500 ml-1">{detailReview.date}</span>
+                  <StarRatingDisplay rating={selectedAppt.review.rating} size="md" />
+                  <span className="text-xs text-zinc-500 ml-1">{selectedAppt.review.date}</span>
                 </div>
-                {detailReview.comment && <p className="text-sm italic text-zinc-400">"{detailReview.comment}"</p>}
+                {selectedAppt.review.comment && (
+                  <p className="text-sm italic text-zinc-400">&ldquo;{selectedAppt.review.comment}&rdquo;</p>
+                )}
               </div>
             )}
             <div className="flex justify-end gap-3 mt-4 pt-3 border-t border-zinc-800">
-              {(selectedAppt.status === AppointmentStatus.CONFIRMED || selectedAppt.status === AppointmentStatus.NEW) && (
+              {selectedAppt.canBeCancelled && (
                 <>
                   <button type="button" onClick={() => handleCancelClick(selectedAppt)} className="bg-red-950/60 border border-red-900 hover:bg-red-900 hover:text-white text-red-400 font-bold px-4 py-2 rounded-xl text-sm transition-all">
                     Cancel Booking
@@ -253,7 +263,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartBooking }) => {
                   </button>
                 </>
               )}
-              {selectedAppt.status === AppointmentStatus.COMPLETED && !detailReview && (
+              {selectedAppt.canBeReviewed && (
                 <button type="button" onClick={() => openReviewForm(selectedAppt)} className="bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold px-4 py-2 rounded-xl text-sm transition-all">
                   Add Review
                 </button>
@@ -270,21 +280,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartBooking }) => {
         <Modal onClose={closeReviewForm} title="Leave Feedback">
           <form onSubmit={handleReviewSubmit} className="flex flex-col gap-4 text-zinc-300">
             <p className="text-sm text-zinc-400">Your feedback helps our barbers refine their craft and serves as a record for future customers.</p>
-            {selectedAppt.getBarber() && (
-              <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800 flex items-start gap-4 my-1">
-                <div className="bg-amber-500/10 border border-amber-500/30 text-amber-500 rounded-xl h-10 w-10 flex items-center justify-center font-extrabold text-sm shrink-0">
-                  {selectedAppt.getBarber()!.firstName[0]}{selectedAppt.getBarber()!.lastName[0]}
-                </div>
-                <div>
-                  <span className="text-xs text-zinc-500 font-semibold block">BARBER</span>
-                  <span className="text-md font-bold text-zinc-200">{selectedAppt.getBarber()!.firstName} {selectedAppt.getBarber()!.lastName}</span>
-                  <span className="text-xs text-zinc-400 block mt-0.5">{selectedAppt.getService()?.name} • Completed on {selectedAppt.date}</span>
-                </div>
-              </div>
-            )}
+            <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800 my-1">
+              <span className="text-xs text-zinc-500 font-semibold block">BARBER</span>
+              <span className="text-md font-bold text-zinc-200">{selectedAppt.barberName}</span>
+              <span className="text-xs text-zinc-400 block mt-0.5">
+                {selectedAppt.serviceName} • Completed on {selectedAppt.date}
+              </span>
+            </div>
             <div className="flex flex-col gap-2">
               <label className="text-xs text-zinc-500 font-semibold uppercase tracking-wider">Rating</label>
-              <StarRatingInput value={rating} onChange={v => setUi(prev => ({ ...prev, rating: v }))} />
+              <StarRatingInput value={rating} onChange={setRating} />
             </div>
             <div className="flex flex-col gap-2">
               <label htmlFor="comment" className="text-xs text-zinc-500 font-semibold uppercase tracking-wider">Comments (Optional)</label>
@@ -292,7 +297,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartBooking }) => {
                 id="comment"
                 rows={4}
                 value={comment}
-                onChange={e => setUi(prev => ({ ...prev, comment: e.target.value }))}
+                onChange={e => setComment(e.target.value)}
                 placeholder="Share details of your experience..."
                 className="w-full rounded-xl bg-zinc-950 border border-zinc-800 p-3 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-amber-500 transition-colors"
               />

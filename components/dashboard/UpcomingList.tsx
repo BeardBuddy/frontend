@@ -1,14 +1,14 @@
 "use client";
 
 import React from "react";
-import { Appointment } from "@/business-objects/Appointment";
+import type { AppointmentDto } from "@/lib/api/types";
 import { SpotlightCard } from "@/common/components/SpotlightCard";
 import { StatusBadge } from "@/common/components/StatusBadge";
 import { Calendar, Clock, User } from "lucide-react";
 
 interface Props {
-  appointments: Appointment[];
-  onSelect: (appt: Appointment) => void;
+  appointments: AppointmentDto[];
+  onSelect: (appt: AppointmentDto) => void;
 }
 
 export const UpcomingList: React.FC<Props> = ({ appointments, onSelect }) => {
@@ -32,10 +32,10 @@ export const UpcomingList: React.FC<Props> = ({ appointments, onSelect }) => {
             <StatusBadge status={appt.status} />
             <span className="text-xs text-zinc-500">ID: {appt.id.slice(-6)}</span>
           </div>
-          <h4 className="text-lg font-bold text-zinc-200">{appt.getService()?.name}</h4>
+          <h4 className="text-lg font-bold text-zinc-200">{appt.serviceName}</h4>
           <p className="text-sm text-zinc-400 mt-1 flex items-center gap-1.5">
             <User className="h-3.5 w-3.5 text-amber-500" />
-            Barber: {appt.getBarber()?.firstName} {appt.getBarber()?.lastName}
+            Barber: {appt.barberName}
           </p>
           <div className="mt-4 pt-3 border-t border-zinc-900 flex items-center justify-between text-xs text-zinc-500">
             <span className="flex items-center gap-1">

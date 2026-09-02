@@ -1,16 +1,15 @@
 "use client";
 
 import React from "react";
-import { User } from "@/business-objects/User";
-import { Service } from "@/business-objects/Service";
+import type { BarberDto, ServiceDto } from "@/lib/api/types";
 import { SpotlightCard } from "@/common/components/SpotlightCard";
 import { Check, Clock, Scissors, Star } from "lucide-react";
 
 interface Props {
-  availableBarbers: User[];
-  selectedBarber: User | null;
-  selectedService: Service | null;
-  onSelect: (barber: User) => void;
+  availableBarbers: BarberDto[];
+  selectedBarber: BarberDto | null;
+  selectedService: ServiceDto | null;
+  onSelect: (barber: BarberDto) => void;
   compact?: boolean;
 }
 
@@ -38,7 +37,7 @@ export const Step3Barber: React.FC<Props> = ({
         </div>
         <div className="flex items-center gap-3 shrink-0 text-xs text-zinc-500">
           <span className="flex items-center gap-1"><Clock className="h-3.5 w-3.5" /> {selectedService.duration} min</span>
-          <span className="font-bold text-amber-500 text-sm">${selectedService.getPrice()}</span>
+          <span className="font-bold text-amber-500 text-sm">${selectedService.price}</span>
         </div>
       </div>
     )}
@@ -69,7 +68,7 @@ export const Step3Barber: React.FC<Props> = ({
                 <div className="flex-1 min-w-0">
                   <div className="flex justify-between items-start gap-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-bold text-zinc-200">{barber.firstName} {barber.lastName}</span>
+                      <span className="text-sm font-bold text-zinc-200">{barber.fullName}</span>
                       {isSelected && (
                         <span className="text-[10px] font-bold text-amber-500 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded flex items-center gap-1">
                           <Check className="h-3 w-3 stroke-[3]" /> Selected
@@ -77,7 +76,7 @@ export const Step3Barber: React.FC<Props> = ({
                       )}
                     </div>
                     <span className="text-xs font-bold text-amber-500 flex items-center gap-0.5 shrink-0">
-                      <Star className="h-3 w-3 fill-amber-500" /> {barber.getAverageRating() || "—"}
+                      <Star className="h-3 w-3 fill-amber-500" /> {barber.averageRating || "—"}
                     </span>
                   </div>
                   <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border mt-0.5 inline-block ${
@@ -89,14 +88,12 @@ export const Step3Barber: React.FC<Props> = ({
                   </span>
                   <p className="text-xs text-zinc-500 mt-1.5 line-clamp-2">{barber.description}</p>
                   <div className="mt-2 flex flex-wrap gap-1">
-                    {barber.getBarberServices()
-                      .filter((bs, i, arr) => arr.findIndex(x => x.specializationType === bs.specializationType) === i)
-                      .map(bs => (
-                        <span key={bs.specializationType} className="bg-zinc-950 text-zinc-500 border border-zinc-900 text-[10px] font-semibold px-2 py-0.5 rounded-lg uppercase">
-                          {bs.specializationType}
-                        </span>
-                      ))}
-                    {barber.getBarberServices().some(bs => bs.isExpert()) && (
+                    {barber.specializations.map(spec => (
+                      <span key={spec} className="bg-zinc-950 text-zinc-500 border border-zinc-900 text-[10px] font-semibold px-2 py-0.5 rounded-lg uppercase">
+                        {spec}
+                      </span>
+                    ))}
+                    {barber.expert && (
                       <span className="bg-amber-950/30 text-amber-400 border border-amber-900/50 text-[10px] font-bold px-2 py-0.5 rounded-lg">EXPERT</span>
                     )}
                   </div>
