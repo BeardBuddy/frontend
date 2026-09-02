@@ -24,7 +24,6 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       const body = await response.json();
       if (body && typeof body.error === "string") message = body.error;
     } catch {
-      // response had no JSON body; keep the status-based message
     }
     throw new Error(message);
   }
@@ -46,9 +45,12 @@ export const api = {
   getAppointments: (customerId: string) =>
     request<AppointmentListDto>(`/api/customers/${customerId}/appointments`),
 
-  getAvailableSlots: (barberId: string, serviceId: string, date: string) =>
+  getAvailableSlots: (barberId: string, serviceId: string, date: string, customerId: string) =>
     request<AvailableSlotsDto>(
-      `/api/barbers/${barberId}/slots?serviceId=${encodeURIComponent(serviceId)}&date=${encodeURIComponent(date)}`,
+      `/api/barbers/${barberId}/slots`
+        + `?serviceId=${encodeURIComponent(serviceId)}`
+        + `&date=${encodeURIComponent(date)}`
+        + `&customerId=${encodeURIComponent(customerId)}`,
     ),
 
   bookAppointment: (body: BookAppointmentRequest) =>

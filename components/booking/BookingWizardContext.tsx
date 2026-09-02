@@ -127,7 +127,7 @@ export const BookingWizardProvider: React.FC<Props> = ({ customer, onBooked, chi
     }
 
     api
-      .getAvailableSlots(selectedBarber.id, selectedService.id, date)
+      .getAvailableSlots(selectedBarber.id, selectedService.id, date, customer.id)
       .then(result => setAvailableSlots(result.slots))
       .catch(() => setAvailableSlots([]));
   };
