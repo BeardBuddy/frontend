@@ -1,6 +1,8 @@
 import { apiUrl } from "../apiBase";
 import type {
   AppointmentDto,
+  LoadBarbersRequest,
+  LoadBarbersResponse,
   AppointmentListDto,
   AvailableSlotsDto,
   BarberDto,
@@ -15,6 +17,8 @@ import type {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(apiUrl(path), {
     headers: init?.body ? { "Content-Type": "application/json" } : undefined,
+    // The access token lives in an httpOnly cookie, so every call must carry credentials.
+    credentials: "include",
     ...init,
   });
 
@@ -33,6 +37,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  login: (username: string, password: string) =>
+    request<CustomerDto>("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ username, password }),
+    }),
+
+  logout: () => request<{ ok: boolean }>("/api/auth/logout", { method: "POST" }),
+
   getCurrentCustomer: () => request<CustomerDto>("/api/customers/current"),
 
   getServices: () => request<ServiceDto[]>("/api/services"),
@@ -75,6 +87,12 @@ export const api = {
     request<ReviewDto>(`/api/appointments/${appointmentId}/review`, {
       method: "POST",
       body: JSON.stringify({ customerId, rating, comment }),
+    }),
+
+  loadBarbers: (body: LoadBarbersRequest) =>
+    request<LoadBarbersResponse>("/api/barbers/load", {
+      method: "POST",
+      body: JSON.stringify(body),
     }),
 
   applyPromoCode: (code: string, total: number) =>

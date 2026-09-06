@@ -107,3 +107,20 @@ export type BookAppointmentRequest = {
   promoCode: string | null;
   notes: string | null;
 };
+
+export type LoadBarbersRequest = {
+  count: number;
+  startTime: string;
+  endTime: string;
+  weekDays: string[];
+  validFrom?: string;
+};
+
+export type LoadBarbersResponse = {
+  batchId: string;
+  published: number;
+  topic: string;
+  validFrom: string;
+  validTo: string;
+  tookMs: number;
+};
