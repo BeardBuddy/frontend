@@ -15,7 +15,7 @@ import type {
 } from "./types";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(apiUrl(path), {
+  const response = await fetch(await apiUrl(path), {
     headers: init?.body ? { "Content-Type": "application/json" } : undefined,
     // The access token lives in an httpOnly cookie, so every call must carry credentials.
     credentials: "include",
