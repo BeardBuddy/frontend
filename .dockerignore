@@ -1,4 +1,8 @@
+# .next/ is NOT ignored: the runtime Dockerfile copies the prebuilt standalone output.
+# Dockerfile.local builds from source and produces its own, so they never collide.
 node_modules/
-.next/
-.env.local
+.next/cache/
+.env
+.env.*
 .git/
+.github/
