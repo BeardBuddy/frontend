@@ -8,6 +8,7 @@ import { StarRatingInput, StarRatingDisplay } from "@/common/components/StarRati
 import { UpcomingList } from "@/components/dashboard/UpcomingList";
 import { CompletedList } from "@/components/dashboard/CompletedList";
 import { CancelledList } from "@/components/dashboard/CancelledList";
+import { BarberImportCard } from "@/components/dashboard/BarberImportCard";
 import { StatusBadge } from "@/common/components/StatusBadge";
 import {
   Calendar as CalendarIcon, Clock, Scissors, PlusCircle,
@@ -153,6 +154,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ customer, onStartBooking }
           <CancelledList appointments={appointments.cancelled} onSelect={openDetails} />
         </div>
 
+        <div className="flex flex-col gap-8">
         <div className="h-fit rounded-3xl border border-zinc-800 bg-zinc-950/50 p-6 backdrop-blur-md">
           <h3 className="text-lg font-extrabold text-zinc-100 flex items-center gap-2">
             <PlusCircle className="h-5 w-5 text-amber-500" /> Need a Grooming?
@@ -166,6 +168,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ customer, onStartBooking }
           >
             Book Appointment
           </button>
+        </div>
+
+        <BarberImportCard />
         </div>
       </div>
 
