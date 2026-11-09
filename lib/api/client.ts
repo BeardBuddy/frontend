@@ -10,6 +10,7 @@ import type {
   CustomerDto,
   ExtraServiceDto,
   PromoCodeResultDto,
+  RegisterRequest,
   ReviewDto,
   ServiceDto,
 } from "./types";
@@ -41,6 +42,12 @@ export const api = {
     request<CustomerDto>("/api/auth/login", {
       method: "POST",
       body: JSON.stringify({ username, password }),
+    }),
+
+  register: (body: RegisterRequest) =>
+    request<CustomerDto>("/api/auth/register", {
+      method: "POST",
+      body: JSON.stringify(body),
     }),
 
   logout: () => request<{ ok: boolean }>("/api/auth/logout", { method: "POST" }),
@@ -88,6 +95,10 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ customerId, rating, comment }),
     }),
+
+  /** One-click barber import: the API publishes barber.created events, the worker does the rest. */
+  importBarbers: () =>
+    request<LoadBarbersResponse>("/api/barbers/import", { method: "POST" }),
 
   loadBarbers: (body: LoadBarbersRequest) =>
     request<LoadBarbersResponse>("/api/barbers/load", {

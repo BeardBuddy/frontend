@@ -123,4 +123,14 @@ export type LoadBarbersResponse = {
   validFrom: string;
   validTo: string;
   tookMs: number;
+  /** ISO instant from which the same user may import again. */
+  nextImportAt: string;
+};
+export type RegisterRequest = {
+  username: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  email?: string;
 };
